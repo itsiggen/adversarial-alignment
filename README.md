@@ -1,6 +1,6 @@
 # Adversarial Alignment
 
-Adversarial Alignment is a framework for generating textual adversarial examples, developed for jailbreaking LLMs. The approach employs SFT and alignment techniques (RLHF/GRPO) to adapt a generation policy, and is thus agnostic to the model under attack and the adversarial goal.
+Adversarial Alignment is a framework for generating textual adversarial examples, developed for jailbreaking LLMs. We use Reinforcement Learning from Oracle Feedback (RLOF), an approach similar to alignment techniques, to adapt a generation policy towards learning how to create adversarial inputs. This approach is agnostic to the adversarial goal, the model under attack, as well as any and all defenses (like guardrails), thus general in its applicability.
 
 <!-- ## Installation
 
