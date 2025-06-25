@@ -1,0 +1,12 @@
+jailbreakbench
+jailbreakeval
+transformers
+torch
+datasets
+accelerate
+peft
+bitsandbytes
+scipy
+tqdm
+wandb
+requests
