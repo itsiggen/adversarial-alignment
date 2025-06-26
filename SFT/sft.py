@@ -6,6 +6,7 @@ import re
 import math
 from dataclasses import dataclass, field
 from typing import List, Optional
+from accelerate import PartialState
 
 # Import PyTorch and Hugging Face Transformers
 import torch
@@ -21,6 +22,9 @@ from transformers import (
     TrainerState,
 )
 from transformers.trainer_utils import get_last_checkpoint
+
+device_string = PartialState().process_index
+
 
 # Import dataset utilities
 import datasets
@@ -38,8 +42,8 @@ from trl import (
 )
 
 
-MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
-# MODEL_NAME = "Qwen/Qwen3-0.6B"
+# MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
+MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 
 OUTPUT_DIR = "data/Qwen-SFT-training"  # For saving our trained model
 
@@ -61,7 +65,8 @@ model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     trust_remote_code=True,
     torch_dtype=torch.bfloat16,
-    device_map="auto",
+    device_map={'':device_string}
+
 )
 
 print(f"Model parameters: {model.num_parameters():,}")
@@ -116,12 +121,12 @@ class ModelConfig:
     )
 
 
-# TODO Define values
 training_args = SFTConfig(
     output_dir=OUTPUT_DIR,
     overwrite_output_dir=True,
+    per_device_train_batch_size=1,
     num_train_epochs=10,
-    gradient_accumulation_steps=1,
+    gradient_accumulation_steps=2,
     learning_rate=2e-5,
     warmup_ratio=0.1,
     weight_decay=0.01,
@@ -136,8 +141,13 @@ training_args = SFTConfig(
     dataloader_num_workers=2,
     seed=42,
     push_to_hub=False,
+    bf16=True,
+    dataloader_pin_memory=False,
     gradient_checkpointing=True,
     report_to="none",
+    ddp_find_unused_parameters=False,
+    dataloader_persistent_workers=True,
+    # assistant_only_loss=True,
 )
 
 model_args = ModelConfig(
@@ -148,15 +158,12 @@ model_args = ModelConfig(
     attn_implementation="flash_attention_2",
 )
 
-prompt_dataset_sft = datasets.load_dataset(
-    "json",
-    os.path.join(DATASET_PATH),
-)
+prompt_dataset_sft = datasets.load_dataset("json", data_files=DATASET_PATH)
 
 
 def format_for_sft(example):
     """Format messages for SFT training"""
-    formatted_text = apply_chat_template(
+    formatted_text = tokenizer.apply_chat_template(
         example["messages"], tokenize=False, add_generation_prompt=False
     )
     return {"text": formatted_text}
@@ -173,7 +180,7 @@ model_sft = AutoModelForCausalLM.from_pretrained(
 sft_trainer = SFTTrainer(
     model=model_sft,
     # compute_loss_func=compute_loss,
-    train_dataset=formatted_dataset,
+    train_dataset=formatted_dataset["train"],
     processing_class=tokenizer,
     args=training_args,
 )
