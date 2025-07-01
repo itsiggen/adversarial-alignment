@@ -81,34 +81,131 @@ async def evaluate_jailbreak(request: EvaluationRequest):
 async def evaluate_batch(request: BatchEvaluationRequest):
     """Batch evaluate multiple prompts efficiently"""
     start_time = time.time()
-    model = get_model_handler()
-    evaluator = get_evaluator()
     
-    semaphore = asyncio.Semaphore(4)
+    try:
+        model = get_model_handler()
+        evaluator = get_evaluator()
+        
+        # Check if using vLLM and handle batch processing accordingly
+        if hasattr(model, 'use_vllm') and model.use_vllm:
+            # Use vLLM's native batch processing to avoid scheduling conflicts
+            try:
+                # Generate all responses at once using vLLM batch generation
+                response_texts = await asyncio.get_event_loop().run_in_executor(
+                    None, 
+                    model.generate_batch, 
+                    request.prompts, 
+                    request.max_length, 
+                    request.temperature
+                )
+                
+                # Evaluate all responses sequentially to avoid threading issues
+                results = []
+                for i, (prompt, response_text) in enumerate(zip(request.prompts, response_texts)):
+                    attempt = {"question": prompt, "answer": response_text}
+                    is_jailbreak = await asyncio.get_event_loop().run_in_executor(
+                        None, evaluator, attempt
+                    )
+                    
+                    results.append(EvaluationResponse(
+                        jailbreak=1 if is_jailbreak else 0,
+                        response_text=response_text,
+                        evaluation_time=0
+                    ))
+                
+            except Exception as vllm_error:
+                print(f"vLLM batch processing failed: {vllm_error}")
+                # Fallback to sequential processing
+                results = await _process_sequential(request, model, evaluator)
+        else:
+            # Use concurrent processing for transformers (with limited concurrency)
+            results = await _process_concurrent(request, model, evaluator)
+        
+        total_time = time.time() - start_time
+        return BatchEvaluationResponse(results=results, total_time=total_time)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Batch evaluation failed: {str(e)}")
+
+async def _process_sequential(request: BatchEvaluationRequest, model, evaluator):
+    """Process prompts sequentially (fallback for vLLM issues)"""
+    results = []
     
-    async def process_single_prompt(prompt):
-        async with semaphore:
+    for prompt in request.prompts:
+        try:
             response_text = await asyncio.get_event_loop().run_in_executor(
-                None, model.generate_response, prompt, request.max_length, request.temperature
+                None, 
+                model.generate_response, 
+                prompt, 
+                request.max_length, 
+                request.temperature
             )
             
             is_jailbreak = await asyncio.get_event_loop().run_in_executor(
                 None, evaluator, {"question": prompt, "answer": response_text}
             )
             
-            return EvaluationResponse(
+            results.append(EvaluationResponse(
                 jailbreak=1 if is_jailbreak else 0,
                 response_text=response_text,
-                evaluation_time=0  # Individual timing not relevant in batch
-            )
+                evaluation_time=0
+            ))
+            
+        except Exception as e:
+            print(f"Error processing prompt '{prompt[:50]}...': {e}")
+            # Add a failed result
+            results.append(EvaluationResponse(
+                jailbreak=0,
+                response_text=f"Error: {str(e)}",
+                evaluation_time=0
+            ))
     
-    # Process all prompts concurrently
+    return results
+
+async def _process_concurrent(request: BatchEvaluationRequest, model, evaluator):
+    """Process prompts concurrently (for transformers)"""
+    semaphore = asyncio.Semaphore(2)  # Reduced concurrency to avoid issues
+    
+    async def process_single_prompt(prompt):
+        async with semaphore:
+            try:
+                response_text = await asyncio.get_event_loop().run_in_executor(
+                    None, model.generate_response, prompt, request.max_length, request.temperature
+                )
+                
+                is_jailbreak = await asyncio.get_event_loop().run_in_executor(
+                    None, evaluator, {"question": prompt, "answer": response_text}
+                )
+                
+                return EvaluationResponse(
+                    jailbreak=1 if is_jailbreak else 0,
+                    response_text=response_text,
+                    evaluation_time=0
+                )
+            except Exception as e:
+                print(f"Error processing prompt '{prompt[:50]}...': {e}")
+                return EvaluationResponse(
+                    jailbreak=0,
+                    response_text=f"Error: {str(e)}",
+                    evaluation_time=0
+                )
+    
     tasks = [process_single_prompt(prompt) for prompt in request.prompts]
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
     
-    total_time = time.time() - start_time
+    # Handle any exceptions that weren't caught
+    processed_results = []
+    for result in results:
+        if isinstance(result, Exception):
+            processed_results.append(EvaluationResponse(
+                jailbreak=0,
+                response_text=f"Error: {str(result)}",
+                evaluation_time=0
+            ))
+        else:
+            processed_results.append(result)
     
-    return BatchEvaluationResponse(results=results, total_time=total_time)
+    return processed_results
 
 @app.get("/health")
 async def health_check():
