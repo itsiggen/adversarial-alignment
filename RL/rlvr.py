@@ -19,6 +19,9 @@ from transformers import (
     TrainerState,
 )
 from transformers.trainer_utils import get_last_checkpoint
+from accelerate import PartialState
+
+device_string = PartialState().process_index
 
 import datasets
 from datasets import load_dataset
@@ -69,7 +72,8 @@ if os.path.exists(SFT_TRAINED_MODEL_PATH):
         SFT_TRAINED_MODEL_PATH,
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
-        device_map="auto",
+        # device_map="auto",
+        device_map={'': device_string}  
     )
 else:
     print(f"No SFT pre-trained model found at {SFT_TRAINED_MODEL_PATH}.")

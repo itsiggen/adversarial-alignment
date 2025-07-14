@@ -5,6 +5,10 @@ from transformers import (
     TrainerState,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class LoggingCallback(TrainerCallback):
     """

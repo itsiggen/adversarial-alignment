@@ -6,3 +6,4 @@ accelerate
 bitsandbytes
 jailbreakeval
 pydantic
+vllm>=0.2.0
