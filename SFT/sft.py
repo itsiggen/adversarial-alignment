@@ -47,7 +47,8 @@ MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 
 OUTPUT_DIR = "data/Qwen-SFT-training"  # For saving our trained model
 
-DATASET_PATH = "data/semantic_prompt_dataset_sft.json"  # Path to the dataset CSV file
+# DATASET_PATH = "data/semantic_prompt_dataset_sft.json"  # Path to the dataset JSON file
+DATASET_PATH = "data/formatted_alert_sft.jsonl"  # Path to the dataset JSON file
 
 # Create output directory if it doesn't exist
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -65,8 +66,8 @@ model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     trust_remote_code=True,
     torch_dtype=torch.bfloat16,
-    device_map={'':device_string}
-
+    # device_map={'':device_string}
+    device_map="auto",
 )
 
 print(f"Model parameters: {model.num_parameters():,}")
@@ -125,7 +126,7 @@ training_args = SFTConfig(
     output_dir=OUTPUT_DIR,
     overwrite_output_dir=True,
     per_device_train_batch_size=1,
-    num_train_epochs=10,
+    num_train_epochs=2,
     gradient_accumulation_steps=2,
     learning_rate=2e-5,
     warmup_ratio=0.1,
@@ -147,7 +148,7 @@ training_args = SFTConfig(
     report_to="none",
     ddp_find_unused_parameters=False,
     dataloader_persistent_workers=True,
-    # assistant_only_loss=True,
+    # # assistant_only_loss=True,
 )
 
 model_args = ModelConfig(
