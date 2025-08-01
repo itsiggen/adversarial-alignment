@@ -1,32 +1,21 @@
 # Adversarial Alignment
 
-Adversarial Alignment is a framework for generating textual adversarial examples, developed for jailbreaking LLMs. We use Reinforcement Learning from Oracle Feedback (RLOF), an approach similar to alignment techniques, to adapt a generation policy towards learning how to create adversarial inputs. This approach is agnostic to the adversarial goal, the model under attack, as well as any and all defenses (like guardrails), thus general in its applicability.
-
-<!-- ## Installation
-
-Use the package manager [pip](https://pip.pypa.io/en/stable/) to install foobar.
-
-```bash
-pip install adal
-``` -->
-
-## Requirements
-- Python 3.12.7
+Adversarial Alignment is a framework developed for generating textual adversarial examples, for instance jailbreaking LLMs. We introduce Reinforcement Learning from Oracle Feedback (RLOF), an approach similar to RLHF, to adapt a generation policy towards learning how to create adversarial examples. This approach is designed to be agnostic to the adversarial goal, the underlying decision-making process (the oracle part), as well as any and all defenses (for instance guardrails), thus general in its applicability.
 
 ## Usage
 
-```python
-import adal
+### Supervised Fine-Tuning
 
+The adversarial example generation process is bootstrapped from known pairs of clean and adversarial examples, as well as a trained model that classifies them. To fine-tune a model for generating adversarial examples, adjust the load_data function and replace the classifier, then run the script:
+
+```bash
+python asft.py
 ```
 
-<!-- ## Contributing
+### RLOF
 
-Pull requests are welcome. For major changes, please open an issue first
-to discuss what you would like to change.
+After ASFT, the model will have learned an initial mapping between clean and adversarial distributions. This does not mean however that the examples that it generates are adversarial - or will continue to be, after adversarial training. To dapt the attacker policy based on the classifier decisions, once more replace the classifier, then run the script:
 
-Please make sure to update tests as appropriate.
-
-## License
-
-[MIT](https://choosealicense.com/licenses/mit/) -->
+```bash
+python rlof.py
+```

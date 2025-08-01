@@ -5,7 +5,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingA
 from transformers import pipeline
 
 """
-Script for supervised fine-tuning (SFT) to generate adversarial prompts.
+Adversarial supervised fine-tuning (ASFT) to generate
+adversarial examples against a web request log classifier.
 """
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -13,11 +14,38 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # Load and preprocess the data
 def load_data():
     # Load clean data
-    ...
+    to_drop = ['response_size', 'cookie', 'network', 'request_body', 'pattern', 'label']
+    clean = pd.read_json("data/processed.json")
+    clean = clean.drop(to_drop, axis=1)
+
+    num_cols = ['client_address', 'request_size']
+    cat_cols = [col for col in clean.columns if col not in num_cols]
+
+    for col in cat_cols:
+        clean[col] = clean[col].apply(lambda x: ', '.join(map(str, x)) if isinstance(x, list) else x)
+   
+    # Convert to text
+    def concat_text(row):
+        tagged_text = []
+        for col in row.index:
+            value = row[col]
+            tagged_text.append(f"{col}: {value}")
+        return "|".join(tagged_text) + "|"
+
+    clean_texts = clean.apply(concat_text, axis=1)
 
     # Load adversarial data
-    
-    #return clean, advs
+    adv = pd.read_csv('data/advs.csv')
+    og_idx = adv["og_index"]
+    adv = adv.drop(['label','og_index'], axis=1)
+    adv_texts = adv.apply(concat_text, axis=1).tolist()
+
+    # Align clean and adversarial by index
+    mapped_clean = og_idx.map(clean_texts)
+    mask = mapped_clean.notna()
+    clean_texts = mapped_clean[mask].tolist()
+
+    return clean_texts, adv_texts
 
 def tokenize_and_mask(dataset, tokenizer, max_length=1024):
     sep = "~~"
@@ -55,7 +83,7 @@ def tokenize_and_mask(dataset, tokenizer, max_length=1024):
 
     return dataset.map(fn, batched=True, remove_columns=["clean", "adv"])
 
-# Fine-tune for generating adversarial examples, given clean ones
+# Fine-tune for generating adversarial examples, given clean ones as prompts
 def fine_tune(clean_texts, adversarial_texts):
     ds = Dataset.from_dict({"clean": clean_texts, "adv": adversarial_texts})
 
