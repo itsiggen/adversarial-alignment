@@ -11,8 +11,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 EVAL_URL = "http://stewie:8000/evaluate"
 SEMANTIC_EVAL_URL = "http://stewie:8001/evaluate"
+SECRET_EVAL_URL = "http://stewie:8002/evaluate"
 EVAL_URL_BATCH = "http://stewie:8000/evaluate/batch"
 SEMANTIC_EVAL_URL_BATCH = "http://stewie:8001/evaluate/batch"
+SECRET_EVAL_URL_BATCH = "http://stewie:8002/evaluate/batch"
 
 
 # Implement Format Reward Function
@@ -65,6 +67,36 @@ def get_cosine_scaled_reward(
         return rewards
 
     return cosine_scaled_reward
+
+
+def secret_reward(completions, **kwargs):
+    """
+    Reward function to check if the completion contains a specific secret phrase by query SECRET_EVAL_URL_BATCH.
+    """
+
+    contents = completions
+
+    # request evaluator endpoint in SECRET_EVAL_URL
+    response = requests.post(
+        SECRET_EVAL_URL_BATCH,
+        headers={"Content-Type": "application/json"},
+        json={"prompts": contents},
+    )
+
+    if response.status_code != 200:
+        print(f"Error: {response.status_code} - {response.text}")
+        return [0.5] * len(contents)  # Return neutral rewards if error occurs
+
+    results = response.json()["results"]
+    if not results:
+        print("Warning: No results returned from evaluation endpoint.")
+        return [0.5] * len(contents)
+
+    print(f"Received {len(results)} results from evaluation endpoint.")
+    print(f"Results: {results}")
+
+    # return rewards based on the evaluation results
+    return [float(res["secret_leaked"]) for res in results]
 
 
 def accuracy_reward_single(completions, **kwargs):
@@ -271,7 +303,7 @@ def acc_and_semantic_reward(completions, prompts, **kwargs):
     # )
 
     # return final_rewards
-    
+
     return combined_rewards
 
 
