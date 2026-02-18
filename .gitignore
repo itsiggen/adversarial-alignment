@@ -3,6 +3,10 @@
 __pycache__/
 *.pkl
 *.pt
+*.pth
+*.bin
+*.safetensors
 *.csv
-/data
-/engineering
+/data/
+/engineering/
+finetune/data/Qwen-LoRAd/
