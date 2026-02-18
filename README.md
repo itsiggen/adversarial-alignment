@@ -1,21 +1,61 @@
 # Adversarial Alignment
 
-Adversarial Alignment is a framework developed for generating textual adversarial examples, for instance jailbreaking LLMs. We introduce Reinforcement Learning from Oracle Feedback (RLOF), an approach similar to RLHF, to adapt a generation policy towards learning how to create adversarial examples. This approach is designed to be agnostic to the adversarial goal, the underlying decision-making process (the oracle part), as well as any and all defenses (for instance guardrails), thus general in its applicability.
+Automated red-teaming framework for LLMs. An attacker model learns to generate jailbreaks that elicit harmful responses from a victim model, guided by a judge that scores each attempt.
+
+## Pipeline
+
+```
+1. SFT      Attacker learns jailbreak patterns from example pairs
+2. GRPO     Attacker optimizes against live victim + judge
+               Attacker generates jailbreak from forbidden prompt
+               Victim responds to the jailbreak
+               Judge evaluates whether the victim complied
+               Topic relevance gate filters off-topic false positives
+               Reward signal updates attacker policy
+3. Generate  Produce and evaluate jailbreaks with trained model
+```
+
+## Setup
+
+```bash
+pip install -r requirements.txt
+```
 
 ## Usage
 
-### Supervised Fine-Tuning
-
-The adversarial example generation process is bootstrapped from known pairs of clean and adversarial examples, as well as a trained model that classifies them. To fine-tune a model for generating adversarial examples, adjust the load_data function and replace the classifier, then run the script:
+### 1. SFT Pre-training
 
 ```bash
-python asft.py
+python finetune/sft_conditional.py
+python finetune/sft_conditional.py --test --samples 5  # test
 ```
 
-### RLOF
-
-After ASFT, the model will have learned an initial mapping between clean and adversarial distributions. This does not mean however that the examples that it generates are adversarial - or will continue to be, after adversarial training. To dapt the attacker policy based on the classifier decisions, once more replace the classifier, then run the script:
+### 2. GRPO Training
 
 ```bash
-python rlof.py
+python train.py --verbose                           # print samples during training
+python train.py --victim-model llama3.1-8b          # specific victim
+```
+
+### 3. Generate
+
+```bash
+python generate.py                                  # generate example jailbreaks
+```
+
+## Project Structure
+
+```
+train.py                  GRPO training entry point
+generate.py               Generation and evaluation
+adaptation/
+  rlof.py                 GRPO training pipeline
+  rewards.py              Reward functions and topic relevance gate
+judge/
+  evaluator.py            Rule-based, LLM, and hybrid evaluators
+victim/
+  victim_model.py         Victim model wrapper
+  model_registry.py       Supported victim models
+finetune/
+  sft_conditional.py      SFT pre-training
 ```

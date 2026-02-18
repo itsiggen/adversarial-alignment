@@ -1,0 +1,12 @@
+*.pyc
+*.arrow
+__pycache__/
+*.pkl
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.csv
+/data/
+/engineering/
+finetune/data/Qwen-LoRAd/
